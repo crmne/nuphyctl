@@ -173,6 +173,13 @@ fn print_changes(layout: &Layout, changes: &[Change]) {
     }
 }
 
+fn should_show_text_key(code: u16, factory: Option<u16>, named: bool) -> bool {
+    match factory {
+        Some(default) => code != default,
+        None => named || code != 0,
+    }
+}
+
 pub fn run_info(api: &HidApi, args: &KeymapInfoArgs) -> Result<()> {
     with_keyboard(api, &args.device, |kb| {
         let fw = kb.protocol.get_firmware_info()?;
@@ -278,7 +285,7 @@ pub fn run_dump(api: &HidApi, args: &KeymapDumpArgs) -> Result<()> {
                     keys.push(v);
                     continue;
                 }
-                if layout.name_of(index).is_none() && code == 0 {
+                if !should_show_text_key(code, default, layout.name_of(index).is_some()) {
                     continue;
                 }
                 let rc = match g.row_col(index) {
@@ -598,4 +605,28 @@ pub fn run_positions(args: &KeymapListArgs) -> Result<()> {
         println!("{}", line.trim_end());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_show_text_key;
+
+    #[test]
+    fn changed_dump_shows_disabled_unnamed_keys() {
+        assert!(should_show_text_key(0, Some(0x0004), false));
+    }
+
+    #[test]
+    fn changed_dump_omits_unchanged_keys() {
+        assert!(!should_show_text_key(0, Some(0), false));
+        assert!(!should_show_text_key(0x0004, Some(0x0004), false));
+        assert!(!should_show_text_key(0x0004, Some(0x0004), true));
+    }
+
+    #[test]
+    fn normal_dump_only_suppresses_unnamed_zero_entries() {
+        assert!(!should_show_text_key(0, None, false));
+        assert!(should_show_text_key(0, None, true));
+        assert!(should_show_text_key(0x0004, None, false));
+    }
 }
